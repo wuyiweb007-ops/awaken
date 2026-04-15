@@ -1,0 +1,16 @@
+# 仓库根在 awaken/，需显式忽略 Flutter 构建产物（app 内 .gitignore 的 /build/ 仅匹配仓库根下 build）
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/build/
+app/.pub/
+app/coverage/
+app/**/*.freezed.dart
+app/**/*.g.dart
+
+# 通用
+.DS_Store
+Thumbs.db
+*.log
+.idea/
+*.iml
