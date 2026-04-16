@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/date_helpers.dart';
 import '../../../../data/models/todo_item.dart';
 import '../../../providers/today_provider.dart';
 import '../../../widgets/paper_background.dart';
@@ -13,11 +14,26 @@ class TodoSection extends StatelessWidget {
     final provider = context.watch<TodayProvider>();
     final todos = provider.record.todos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SectionLabel('待 办 事 项', icon: Icons.list_alt_rounded),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SectionLabel('待 办 事 项', icon: Icons.list_alt_rounded),
+            const Spacer(),
+            Text(
+              formatDate(DateTime.now()),
+              style: TextStyle(
+                fontSize: 11,
+                color: inkMed,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
         const SizedBox(height: 8),
         ...todos.map((t) => _TodoRow(item: t, isDark: isDark)),
         const SizedBox(height: 4),
@@ -70,7 +86,6 @@ class _TodoRowState extends State<_TodoRow> {
     final p = widget.item.priority;
     final pColor = AppColors.priorityColor(p, widget.isDark);
     final inkMed = widget.isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
-    final divider = widget.isDark ? AppColors.dividerDark : AppColors.dividerLight;
 
     return GestureDetector(
       onLongPress: () => setState(() => _showActions = !_showActions),
@@ -193,7 +208,6 @@ class _TodoRowState extends State<_TodoRow> {
                 ],
               ),
             ),
-          Divider(color: divider.withValues(alpha: 0.5), height: 1),
         ],
       ),
     );

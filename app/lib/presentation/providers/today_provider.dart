@@ -11,18 +11,58 @@ class TodayProvider extends ChangeNotifier {
   final StorageService _storage;
   final _uuid = const Uuid();
   Timer? _saveDebounce;
+  Timer? _midnightTimer;
 
   TodayProvider(this._storage);
 
   late DailyRecord _record;
-  bool _justSaved = false;
+
+  /// 撤销栈，最多保存 30 步
+  final List<DailyRecord> _undoStack = [];
+  static const int _maxUndo = 30;
 
   DailyRecord get record => _record;
-  bool get justSaved => _justSaved;
+  bool get canUndo => _undoStack.isNotEmpty;
 
   void loadToday() {
     _record = _storage.loadRecord(todayKey());
+    _undoStack.clear();
     notifyListeners();
+    _scheduleMidnightArchive();
+  }
+
+  /// 撤销上一步操作
+  void undo() {
+    if (_undoStack.isEmpty) return;
+    _record = _undoStack.removeLast();
+    notifyListeners();
+    _saveDebounce?.cancel();
+    _saveDebounce = Timer(const Duration(milliseconds: 800), () {
+      _storage.saveRecord(_record);
+    });
+  }
+
+  // ── Midnight auto-archive ────────────────────────────────────
+
+  void _scheduleMidnightArchive() {
+    _midnightTimer?.cancel();
+    final now = DateTime.now();
+    final tomorrow = DateTime(now.year, now.month, now.day + 1);
+    final msUntilMidnight = tomorrow.difference(now).inMilliseconds + 1000;
+    _midnightTimer = Timer(Duration(milliseconds: msUntilMidnight), () {
+      _archiveAndReset();
+    });
+  }
+
+  void _archiveAndReset() {
+    // 将当前记录标记为已归档并保存
+    final archived = _record.copyWith(isSaved: true, savedAt: DateTime.now());
+    _storage.saveRecord(archived);
+    // 加载新的一天（空白记录）
+    _record = _storage.loadRecord(todayKey());
+    _undoStack.clear();
+    notifyListeners();
+    _scheduleMidnightArchive();
   }
 
   // ── TODO operations ─────────────────────────────────────────
@@ -134,23 +174,13 @@ class TodayProvider extends ChangeNotifier {
     _update(_record.copyWith(reflection: text));
   }
 
-  // ── SAVE DAY ────────────────────────────────────────────────
-
-  Future<void> saveDay() async {
-    final saved = _record.copyWith(isSaved: true, savedAt: DateTime.now());
-    _record = saved;
-    await _storage.saveRecord(saved);
-    _justSaved = true;
-    notifyListeners();
-    Future.delayed(const Duration(seconds: 2), () {
-      _justSaved = false;
-      notifyListeners();
-    });
-  }
-
   // ── Internal ────────────────────────────────────────────────
 
-  void _update(DailyRecord updated) {
+  void _update(DailyRecord updated, {bool pushUndo = true}) {
+    if (pushUndo) {
+      _undoStack.add(_record);
+      if (_undoStack.length > _maxUndo) _undoStack.removeAt(0);
+    }
     _record = updated;
     notifyListeners();
     _saveDebounce?.cancel();
@@ -162,6 +192,7 @@ class TodayProvider extends ChangeNotifier {
   @override
   void dispose() {
     _saveDebounce?.cancel();
+    _midnightTimer?.cancel();
     super.dispose();
   }
 }

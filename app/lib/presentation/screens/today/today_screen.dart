@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/utils/date_helpers.dart';
+import '../../providers/today_provider.dart';
 import '../../widgets/paper_background.dart';
 import 'widgets/actual_section.dart';
 import 'widgets/plan_section.dart';
 import 'widgets/reflection_section.dart';
-import 'widgets/stats_bottom_bar.dart';
 import 'widgets/todo_section.dart';
 
 class TodayScreen extends StatelessWidget {
@@ -15,65 +15,55 @@ class TodayScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final bg = isDark ? AppColors.bgDark : AppColors.bgLight;
-    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
     final divider = isDark ? AppColors.dividerDark : AppColors.dividerLight;
-    final accent = isDark ? AppColors.accentDark : AppColors.accentLight;
+    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
+    final canUndo = context.watch<TodayProvider>().canUndo;
 
     return Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: bg,
-        title: Row(
+      body: SafeArea(
+        child: Stack(
           children: [
-            Text(
-              '工字日程纸',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight,
-                letterSpacing: 0.5,
-              ),
+            SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              physics: const BouncingScrollPhysics(),
+              child: _GongziCard(isDark: isDark, divider: divider),
             ),
-            const SizedBox(width: 6),
-            // Small seal dot
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                color: accent,
-                shape: BoxShape.circle,
+            // 撤销按钮（右上角，有可撤销操作时显示）
+            if (canUndo)
+              Positioned(
+                top: 6,
+                right: 12,
+                child: GestureDetector(
+                  onTap: () => context.read<TodayProvider>().undo(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? AppColors.surfaceAltDark
+                          : AppColors.surfaceAltLight,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(
+                        color: isDark ? AppColors.dividerDark : AppColors.dividerLight,
+                        width: 0.8,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.undo_rounded, size: 14, color: inkLight),
+                        const SizedBox(width: 4),
+                        Text(
+                          '撤销',
+                          style: TextStyle(fontSize: 11.5, color: inkLight),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
           ],
         ),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Text(
-              formatDate(DateTime.now()),
-              style: TextStyle(
-                fontSize: 12,
-                color: inkMed,
-                letterSpacing: 0.3,
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-              physics: const BouncingScrollPhysics(),
-              child: _GongziCard(
-                isDark: isDark,
-                divider: divider,
-              ),
-            ),
-          ),
-          const StatsBottomBar(),
-        ],
       ),
     );
   }
@@ -104,11 +94,6 @@ class _GongziCard extends StatelessWidget {
             blurRadius: 12,
             offset: const Offset(0, 3),
           ),
-          BoxShadow(
-            color: shadowColor.withValues(alpha: 0.06),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
         ],
       ),
       child: ClipRRect(
@@ -120,7 +105,7 @@ class _GongziCard extends StatelessWidget {
             children: [
               // ① 待办事项 (top full-width band)
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
                 child: const TodoSection(),
               ),
 
@@ -131,23 +116,16 @@ class _GongziCard extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Left: Plan
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
+                        padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
                         child: const PlanSection(),
                       ),
                     ),
-                    // Vertical divider
-                    VerticalDivider(
-                      width: 1,
-                      thickness: 1,
-                      color: divider,
-                    ),
-                    // Right: Actual
+                    VerticalDivider(width: 1, thickness: 1, color: divider),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 12, 14, 10),
+                        padding: const EdgeInsets.fromLTRB(8, 10, 14, 10),
                         child: const ActualSection(),
                       ),
                     ),
@@ -159,7 +137,7 @@ class _GongziCard extends StatelessWidget {
 
               // ④ 省察感悟 (bottom full-width band)
               Padding(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 16),
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 16),
                 child: const ReflectionSection(),
               ),
             ],

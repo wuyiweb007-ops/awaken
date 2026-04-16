@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/time_block.dart';
+import '../../../widgets/time_range_picker.dart';
 
 typedef OnBlockChanged = void Function(
     String id, {String? startTime, String? endTime, String? description});
@@ -31,29 +32,17 @@ class TimeBlockItem extends StatefulWidget {
 }
 
 class _TimeBlockItemState extends State<TimeBlockItem> {
-  late final TextEditingController _startCtrl;
-  late final TextEditingController _endCtrl;
   late final TextEditingController _descCtrl;
 
   @override
   void initState() {
     super.initState();
-    _startCtrl = TextEditingController(text: widget.block.startTime);
-    _endCtrl = TextEditingController(text: widget.block.endTime);
     _descCtrl = TextEditingController(text: widget.block.description);
   }
 
   @override
   void didUpdateWidget(TimeBlockItem old) {
     super.didUpdateWidget(old);
-    if (old.block.startTime != widget.block.startTime &&
-        _startCtrl.text != widget.block.startTime) {
-      _startCtrl.text = widget.block.startTime;
-    }
-    if (old.block.endTime != widget.block.endTime &&
-        _endCtrl.text != widget.block.endTime) {
-      _endCtrl.text = widget.block.endTime;
-    }
     if (old.block.description != widget.block.description &&
         _descCtrl.text != widget.block.description) {
       _descCtrl.text = widget.block.description;
@@ -62,17 +51,30 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
 
   @override
   void dispose() {
-    _startCtrl.dispose();
-    _endCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickTime() async {
+    if (widget.readonly) return;
+    final result = await showTimeRangePicker(
+      context,
+      initialStart: widget.block.startTime,
+      initialEnd: widget.block.endTime,
+      accentColor: widget.accentColor,
+      isDark: widget.isDark,
+    );
+    if (result != null) {
+      widget.onChanged(widget.block.id,
+          startTime: result.start, endTime: result.end);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final inkLight = widget.isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
     final inkDark = widget.isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
-    final divider = widget.isDark ? AppColors.dividerDark : AppColors.dividerLight;
+    final hasTime = widget.block.startTime.isNotEmpty || widget.block.endTime.isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -96,39 +98,44 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Time row
-                Row(
-                  children: [
-                    _TimeInput(
-                      controller: _startCtrl,
-                      hint: '09:00',
-                      color: widget.accentColor,
-                      isDark: widget.isDark,
-                      readonly: widget.readonly,
-                      onChanged: (v) => widget.onChanged(
-                          widget.block.id,
-                          startTime: v),
+                // Time chip row — tap to open picker
+                GestureDetector(
+                  onTap: _pickTime,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: widget.accentColor.withValues(alpha: hasTime ? 0.12 : 0.06),
+                      borderRadius: BorderRadius.circular(4),
                     ),
-                    Text(
-                      ' – ',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: inkLight,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.schedule_rounded,
+                          size: 11,
+                          color: widget.accentColor.withValues(alpha: hasTime ? 0.85 : 0.4),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          hasTime
+                              ? '${widget.block.startTime.isEmpty ? '--:--' : widget.block.startTime}'
+                                '  –  '
+                                '${widget.block.endTime.isEmpty ? '--:--' : widget.block.endTime}'
+                              : '点击设置时间',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: widget.accentColor.withValues(alpha: hasTime ? 0.9 : 0.45),
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                            fontWeight: hasTime ? FontWeight.w600 : FontWeight.normal,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ],
                     ),
-                    _TimeInput(
-                      controller: _endCtrl,
-                      hint: '10:00',
-                      color: widget.accentColor,
-                      isDark: widget.isDark,
-                      readonly: widget.readonly,
-                      onChanged: (v) => widget.onChanged(
-                          widget.block.id,
-                          endTime: v),
-                    ),
-                  ],
+                  ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
+                // Description
                 widget.readonly
                     ? Text(
                         widget.block.description.isEmpty
@@ -165,8 +172,6 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
                         maxLines: null,
                         keyboardType: TextInputType.multiline,
                       ),
-                const SizedBox(height: 2),
-                Divider(color: divider.withValues(alpha: 0.4), height: 1),
               ],
             ),
           ),
@@ -190,54 +195,6 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
             ],
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TimeInput extends StatelessWidget {
-  final TextEditingController controller;
-  final String hint;
-  final Color color;
-  final bool isDark;
-  final bool readonly;
-  final ValueChanged<String> onChanged;
-
-  const _TimeInput({
-    required this.controller,
-    required this.hint,
-    required this.color,
-    required this.isDark,
-    required this.readonly,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 38,
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        readOnly: readonly,
-        style: TextStyle(
-          fontSize: 11.5,
-          color: color,
-          fontFeatures: const [FontFeature.tabularFigures()],
-          fontWeight: FontWeight.w600,
-        ),
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: TextStyle(
-            fontSize: 11,
-            color: color.withValues(alpha: 0.35),
-          ),
-          border: InputBorder.none,
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-        ),
-        keyboardType: TextInputType.datetime,
-        textInputAction: TextInputAction.next,
       ),
     );
   }
