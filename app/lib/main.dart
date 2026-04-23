@@ -35,7 +35,7 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => TodayProvider(storage)..loadToday(),
         ),
-        Provider<HistoryProvider>(
+        ChangeNotifierProvider(
           create: (_) => HistoryProvider(storage),
         ),
       ],

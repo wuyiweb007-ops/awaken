@@ -9,6 +9,7 @@ import '../../../data/models/daily_record.dart';
 import '../../../data/models/time_block.dart';
 import '../../../data/models/todo_item.dart';
 import '../../providers/history_provider.dart';
+import '../../widgets/gongzi_day_card.dart';
 import '../../widgets/paper_background.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -23,7 +24,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   /// page 0 = yesterday, page 1 = 2 days ago, etc.
   static const int _maxPages = 365;
-  int _currentPage = 0;
 
   @override
   void initState() {
@@ -49,99 +49,124 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
     final accent = isDark ? AppColors.accentDark : AppColors.accentLight;
 
-    final currentKey = _dateKeyForPage(_currentPage);
-
     return Scaffold(
       backgroundColor: bg,
-      appBar: AppBar(
-        backgroundColor: bg,
-        title: Row(
+      body: SafeArea(
+        child: Stack(
           children: [
-            Text(
-              '历史',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight,
+            PageView.builder(
+              controller: _pageController,
+              itemCount: _maxPages,
+              physics: const BouncingScrollPhysics(),
+              itemBuilder: (context, page) {
+                final key = _dateKeyForPage(page);
+                final record = context.read<HistoryProvider>().loadRecord(key);
+                if (record.isEmpty) {
+                  return _EmptyDayPage(isDark: isDark);
+                }
+                return GongziDayCard(
+                  isDark: isDark,
+                  topBandChild: _HistoryTodoBand(record: record, isDark: isDark),
+                  midLeftChild: _ReadonlyBlocks(
+                    label: '计划完成',
+                    icon: Icons.schedule_rounded,
+                    blocks: record.planBlocks,
+                    color: isDark
+                        ? AppColors.planColorDark
+                        : AppColors.planColorLight,
+                    isDark: isDark,
+                  ),
+                  midRightChild: _ReadonlyBlocks(
+                    label: '实际完成',
+                    icon: Icons.check_circle_outline,
+                    blocks: record.actualBlocks,
+                    color: isDark
+                        ? AppColors.actualColorDark
+                        : AppColors.actualColorLight,
+                    isDark: isDark,
+                  ),
+                  bottomBandChild:
+                      _HistoryReflectionBand(record: record, isDark: isDark),
+                )
+                    .animate()
+                    .fadeIn(duration: 250.ms)
+                    .slideX(begin: 0.03, end: 0, duration: 250.ms);
+              },
+            ),
+            Positioned(
+              top: 6,
+              right: 12,
+              child: GestureDetector(
+                onTap: _jumpToNearest,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? AppColors.surfaceAltDark
+                        : AppColors.surfaceAltLight,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color:
+                          isDark ? AppColors.dividerDark : AppColors.dividerLight,
+                      width: 0.8,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.history_rounded, size: 14, color: accent),
+                      const SizedBox(width: 4),
+                      Text(
+                        '最近记录',
+                        style: TextStyle(fontSize: 11.5, color: inkMed),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-            const SizedBox(width: 8),
-            Text(
-              dateKeyToDisplay(currentKey),
-              style: TextStyle(
-                fontSize: 12,
-                color: inkMed,
-                letterSpacing: 0.3,
+            Positioned(
+              bottom: 12,
+              left: 0,
+              right: 0,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.chevron_left_rounded,
+                    color: inkMed.withValues(alpha: 0.4),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '左滑看更早',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: inkMed.withValues(alpha: 0.4),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    '右滑看更近',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: inkMed.withValues(alpha: 0.4),
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: inkMed.withValues(alpha: 0.4),
+                    size: 18,
+                  ),
+                ],
               ),
             ),
           ],
         ),
-        actions: [
-          // Jump to nearest
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: IconButton(
-              onPressed: () => _jumpToNearest(),
-              icon: Icon(Icons.history_rounded, size: 20, color: accent),
-              tooltip: '最近有记录的一天',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          // Page view
-          PageView.builder(
-            controller: _pageController,
-            itemCount: _maxPages,
-            physics: const BouncingScrollPhysics(),
-            onPageChanged: (p) => setState(() => _currentPage = p),
-            itemBuilder: (context, page) {
-              final key = _dateKeyForPage(page);
-              final record = context.read<HistoryProvider>().loadRecord(key);
-              return _HistoryPage(
-                record: record,
-                isDark: isDark,
-              );
-            },
-          ),
-          // Swipe hint indicators
-          Positioned(
-            bottom: 20,
-            left: 0,
-            right: 0,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.chevron_left_rounded,
-                    color: inkMed.withValues(alpha: 0.4), size: 18),
-                const SizedBox(width: 4),
-                Text(
-                  '左滑看更早',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: inkMed.withValues(alpha: 0.4),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Text(
-                  '右滑看更近',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: inkMed.withValues(alpha: 0.4),
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Icon(Icons.chevron_right_rounded,
-                    color: inkMed.withValues(alpha: 0.4), size: 18),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -160,7 +185,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         return;
       }
     }
-    // No records
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('暂无历史记录'),
@@ -170,29 +194,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 }
 
-// ── Individual history page ─────────────────────────────────────────────────
-
-class _HistoryPage extends StatelessWidget {
-  final DailyRecord record;
-  final bool isDark;
-
-  const _HistoryPage({required this.record, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    if (record.isEmpty) {
-      return _EmptyDayPage(isDark: isDark);
-    }
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 60),
-      physics: const BouncingScrollPhysics(),
-      child: _HistoryCard(record: record, isDark: isDark)
-          .animate()
-          .fadeIn(duration: 250.ms)
-          .slideX(begin: 0.03, end: 0, duration: 250.ms),
-    );
-  }
-}
+// ── Empty day ───────────────────────────────────────────────────────────────
 
 class _EmptyDayPage extends StatelessWidget {
   final bool isDark;
@@ -234,116 +236,140 @@ class _EmptyDayPage extends StatelessWidget {
   }
 }
 
-// ── Read-only 工字 card ──────────────────────────────────────────────────────
+// ── History bands (read-only，布局与「今天」一致) ─────────────────────────────
 
-class _HistoryCard extends StatelessWidget {
+class _HistoryTodoBand extends StatelessWidget {
   final DailyRecord record;
   final bool isDark;
 
-  const _HistoryCard({required this.record, required this.isDark});
+  const _HistoryTodoBand({required this.record, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
-    final bg = isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final ruleLine = isDark ? AppColors.ruleLineDark : AppColors.ruleLineLight;
-    final divider = isDark ? AppColors.dividerDark : AppColors.dividerLight;
-    final shadowColor = isDark
-        ? Colors.black.withValues(alpha: 0.3)
-        : const Color(0xFF8B7355).withValues(alpha: 0.12);
+    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    final todos = record.todos.where((t) => t.text.isNotEmpty).toList();
 
-    return Container(
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(color: shadowColor, blurRadius: 12, offset: const Offset(0, 3)),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: CustomPaint(
-          painter: RuleLinePainter(lineColor: ruleLine),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Saved badge
-              if (record.isSaved)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
-                  child: _SavedBadge(isDark: isDark),
-                ),
-
-              // ① 待办
-              if (record.todos.isNotEmpty) ...[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                  child: _ReadonlyTodos(todos: record.todos, isDark: isDark),
-                ),
-                Divider(color: divider, height: 1),
-              ],
-
-              // ② Plan + ③ Actual
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 12, 8, 10),
-                        child: _ReadonlyBlocks(
-                          label: '计划完成',
-                          icon: Icons.schedule_rounded,
-                          blocks: record.planBlocks,
-                          color: isDark
-                              ? AppColors.planColorDark
-                              : AppColors.planColorLight,
-                          isDark: isDark,
-                        ),
-                      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (record.isSaved) const _SavedBadge(),
+        if (record.isSaved) const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SectionLabel('待 办 事 项', icon: Icons.list_alt_rounded),
+            const Spacer(),
+            Text(
+              dateKeyToDisplay(record.dateKey),
+              style: TextStyle(
+                fontSize: 11,
+                color: inkMed,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: todos.isEmpty
+              ? Align(
+                  alignment: Alignment.topLeft,
+                  child: Text(
+                    '（这一天未记待办）',
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: inkMed.withValues(alpha: 0.45),
+                      fontStyle: FontStyle.italic,
+                      height: 1.5,
                     ),
-                    VerticalDivider(width: 1, thickness: 1, color: divider),
-                    Expanded(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 12, 14, 10),
-                        child: _ReadonlyBlocks(
-                          label: '实际完成',
-                          icon: Icons.check_circle_outline,
-                          blocks: record.actualBlocks,
-                          color: isDark
-                              ? AppColors.actualColorDark
-                              : AppColors.actualColorLight,
-                          isDark: isDark,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
+                )
+              : SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: todos
+                        .map((t) => _ReadonlyTodoRow(item: t, isDark: isDark))
+                        .toList(),
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReadonlyTodoRow extends StatelessWidget {
+  final TodoItem item;
+  final bool isDark;
+
+  const _ReadonlyTodoRow({required this.item, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (item.priority.isNotEmpty)
+            Container(
+              width: 16,
+              height: 16,
+              margin: const EdgeInsets.only(right: 6, top: 1),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: AppColors.priorityColor(item.priority, isDark),
+                  width: 1.2,
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: Center(
+                child: Text(
+                  item.priority,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.priorityColor(item.priority, isDark),
+                  ),
                 ),
               ),
-
-              // ④ Reflection
-              if (record.reflection.isNotEmpty) ...[
-                Divider(color: divider, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-                  child: _ReadonlyReflection(
-                      text: record.reflection, isDark: isDark),
-                ),
-              ],
-            ],
+            )
+          else
+            Container(
+              width: 4,
+              height: 4,
+              margin: const EdgeInsets.only(right: 8, top: 6),
+              decoration: BoxDecoration(
+                color: (isDark ? AppColors.inkLightDark : AppColors.inkLightLight)
+                    .withValues(alpha: 0.5),
+                shape: BoxShape.circle,
+              ),
+            ),
+          Expanded(
+            child: Text(
+              item.text,
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight,
+                height: 1.5,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
 class _SavedBadge extends StatelessWidget {
-  final bool isDark;
-  const _SavedBadge({required this.isDark});
+  const _SavedBadge();
 
   @override
   Widget build(BuildContext context) {
-    final color = isDark ? AppColors.actualColorDark : AppColors.actualColorLight;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final color =
+        isDark ? AppColors.actualColorDark : AppColors.actualColorLight;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -358,79 +384,6 @@ class _SavedBadge extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _ReadonlyTodos extends StatelessWidget {
-  final List<TodoItem> todos;
-  final bool isDark;
-  const _ReadonlyTodos({required this.todos, required this.isDark});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionLabel('待 办 事 项', icon: Icons.list_alt_rounded),
-        const SizedBox(height: 8),
-        ...todos.where((t) => t.text.isNotEmpty).map((t) => Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (t.priority.isNotEmpty)
-                    Container(
-                      width: 16,
-                      height: 16,
-                      margin: const EdgeInsets.only(right: 6, top: 1),
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                          color: AppColors.priorityColor(t.priority, isDark),
-                          width: 1.2,
-                        ),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                      child: Center(
-                        child: Text(
-                          t.priority,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.priorityColor(t.priority, isDark),
-                          ),
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      width: 4,
-                      height: 4,
-                      margin: const EdgeInsets.only(right: 8, top: 6),
-                      decoration: BoxDecoration(
-                        color: (isDark
-                                ? AppColors.inkLightDark
-                                : AppColors.inkLightLight)
-                            .withValues(alpha: 0.5),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  Expanded(
-                    child: Text(
-                      t.text,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: isDark
-                            ? AppColors.inkDarkDark
-                            : AppColors.inkDarkLight,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )),
       ],
     );
   }
@@ -457,8 +410,9 @@ class _ReadonlyBlocks extends StatelessWidget {
     final inkDark = isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
     final divider = isDark ? AppColors.dividerDark : AppColors.dividerLight;
 
-    final validBlocks = blocks.where((b) =>
-        b.description.isNotEmpty || b.startTime.isNotEmpty).toList();
+    final validBlocks = blocks
+        .where((b) => b.description.isNotEmpty || b.startTime.isNotEmpty)
+        .toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -467,8 +421,12 @@ class _ReadonlyBlocks extends StatelessWidget {
         const SizedBox(height: 8),
         if (validBlocks.isEmpty)
           Text(
-            '—',
-            style: TextStyle(fontSize: 12, color: inkLight),
+            '（无）',
+            style: TextStyle(
+              fontSize: 12,
+              color: inkLight.withValues(alpha: 0.45),
+              fontStyle: FontStyle.italic,
+            ),
           )
         else
           ...validBlocks.map((b) {
@@ -522,24 +480,56 @@ class _ReadonlyBlocks extends StatelessWidget {
   }
 }
 
-class _ReadonlyReflection extends StatelessWidget {
-  final String text;
+class _HistoryReflectionBand extends StatelessWidget {
+  final DailyRecord record;
   final bool isDark;
-  const _ReadonlyReflection({required this.text, required this.isDark});
+
+  const _HistoryReflectionBand({required this.record, required this.isDark});
 
   @override
   Widget build(BuildContext context) {
+    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    final inkDark = isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
+    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
+    final ruleLine = isDark ? AppColors.ruleLineDark : AppColors.ruleLineLight;
+    final text = record.reflection.trim();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SectionLabel('省 察 感 悟', icon: Icons.auto_stories_outlined),
         const SizedBox(height: 8),
+        Expanded(
+          child: CustomPaint(
+            painter: RuleLinePainter(
+              lineColor: ruleLine.withValues(alpha: 0.55),
+              spacing: 13.5 * 1.7,
+              firstLineY: 0,
+            ),
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Text(
+                text.isEmpty ? '（这一天未写省察）' : text,
+                style: TextStyle(
+                  fontSize: 13.5,
+                  color: text.isEmpty
+                      ? inkLight.withValues(alpha: 0.45)
+                      : inkDark,
+                  height: 1.7,
+                  fontStyle:
+                      text.isEmpty ? FontStyle.italic : FontStyle.normal,
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
         Text(
-          text,
+          '写几句今天的观察与调整方向，不必完整，真实就好。',
           style: TextStyle(
-            fontSize: 13.5,
-            color: isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight,
-            height: 1.7,
+            fontSize: 11.5,
+            color: inkMed.withValues(alpha: 0.5),
+            fontStyle: FontStyle.italic,
           ),
         ),
       ],

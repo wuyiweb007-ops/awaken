@@ -5,6 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/storage_service.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/time_range_picker.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -33,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
           // ── About ──────────────────────────────────────────────
-          _SectionHeader('关于工字日程纸', isDark: isDark),
+          _SectionHeader('关于觉醒笔记', isDark: isDark),
           _AboutCard(isDark: isDark),
           const SizedBox(height: 20),
 
@@ -278,13 +279,14 @@ class _ReminderCard extends StatelessWidget {
     TimeOfDay initial,
     void Function(TimeOfDay) onPicked,
   ) async {
-    final picked = await showTimePicker(
-      context: context,
-      initialTime: initial,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(alwaysUse24HourFormat: true),
-        child: child!,
-      ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accentColor =
+        isDark ? AppColors.accentDark : AppColors.accentLight;
+    final picked = await showNotificationTimePicker(
+      context,
+      initial: initial,
+      accentColor: accentColor,
+      isDark: isDark,
     );
     if (picked != null) onPicked(picked);
   }

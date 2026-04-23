@@ -56,7 +56,7 @@ class NotificationService {
     await _plugin.cancel(_morningId);
     await _plugin.zonedSchedule(
       _morningId,
-      '工字日程纸',
+      '觉醒笔记',
       '早安！今天想成为怎样的一天？来写工字纸吧 ✍️',
       _nextInstance(time.hour, time.minute),
       _details(
@@ -74,7 +74,7 @@ class NotificationService {
     await _plugin.cancel(_eveningId);
     await _plugin.zonedSchedule(
       _eveningId,
-      '工字日程纸',
+      '觉醒笔记',
       '今天快结束了，来看看计划与实际的差别，写几句省察吧 🌙',
       _nextInstance(time.hour, time.minute),
       _details(

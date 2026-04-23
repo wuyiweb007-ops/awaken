@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/date_helpers.dart';
 import '../../../../data/models/todo_item.dart';
 import '../../../providers/today_provider.dart';
 import '../../../widgets/paper_background.dart';
@@ -14,7 +13,7 @@ class TodoSection extends StatelessWidget {
     final provider = context.watch<TodayProvider>();
     final todos = provider.record.todos;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -24,25 +23,55 @@ class TodoSection extends StatelessWidget {
           children: [
             const SectionLabel('待 办 事 项', icon: Icons.list_alt_rounded),
             const Spacer(),
-            Text(
-              formatDate(DateTime.now()),
-              style: TextStyle(
-                fontSize: 11,
-                color: inkMed,
-                letterSpacing: 0.2,
-              ),
+            _AddTodoChip(
+              label: '＋ 添加待办',
+              onTap: () => context.read<TodayProvider>().addTodo(),
+              inkLight: inkLight,
             ),
           ],
         ),
         const SizedBox(height: 8),
-        ...todos.map((t) => _TodoRow(item: t, isDark: isDark)),
-        const SizedBox(height: 4),
-        _AddButton(
-          label: '＋ 添加待办',
-          onTap: () => context.read<TodayProvider>().addTodo(),
-          isDark: isDark,
+        Expanded(
+          child: ListView(
+            physics: const BouncingScrollPhysics(),
+            padding: EdgeInsets.zero,
+            children: [
+              ...todos.map((t) => _TodoRow(item: t, isDark: isDark)),
+            ],
+          ),
         ),
       ],
+    );
+  }
+}
+
+class _AddTodoChip extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final Color inkLight;
+
+  const _AddTodoChip({
+    required this.label,
+    required this.onTap,
+    required this.inkLight,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12.5,
+            color: inkLight,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
     );
   }
 }
@@ -94,7 +123,6 @@ class _TodoRowState extends State<_TodoRow> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Priority badge
               GestureDetector(
                 onTap: () => context
                     .read<TodayProvider>()
@@ -122,34 +150,45 @@ class _TodoRowState extends State<_TodoRow> {
               ),
               const SizedBox(width: 8),
               Expanded(
-                child: TextField(
-                  controller: _ctrl,
-                  onChanged: (v) => context
-                      .read<TodayProvider>()
-                      .updateTodoText(widget.item.id, v),
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    color: widget.isDark
-                        ? AppColors.inkDarkDark
-                        : AppColors.inkDarkLight,
-                    height: 1.4,
+                child: CustomPaint(
+                  painter: RuleLinePainter(
+                    lineColor: (widget.isDark
+                            ? AppColors.ruleLineDark
+                            : AppColors.ruleLineLight)
+                        .withValues(alpha: 0.4),
+                    spacing: 13.5 * 1.4,
+                    firstLineY: 6,
                   ),
-                  decoration: InputDecoration(
-                    hintText: '写下今天想做的事…',
-                    hintStyle: TextStyle(
-                      fontSize: 13,
-                      color: inkMed.withValues(alpha: 0.55),
+                  child: TextField(
+                    controller: _ctrl,
+                    onChanged: (v) => context
+                        .read<TodayProvider>()
+                        .updateTodoText(widget.item.id, v),
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: widget.isDark
+                          ? AppColors.inkDarkDark
+                          : AppColors.inkDarkLight,
+                      height: 1.4,
                     ),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                    decoration: InputDecoration(
+                      hintText: '写下今天想做的事…',
+                      hintStyle: TextStyle(
+                        fontSize: 13,
+                        color: inkMed.withValues(alpha: 0.55),
+                      ),
+                      border: InputBorder.none,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                      filled: true,
+                      fillColor: Colors.transparent,
+                    ),
+                    maxLines: null,
+                    keyboardType: TextInputType.multiline,
+                    textInputAction: TextInputAction.newline,
                   ),
-                  maxLines: null,
-                  keyboardType: TextInputType.multiline,
-                  textInputAction: TextInputAction.newline,
                 ),
               ),
-              // Send-to-plan button
               GestureDetector(
                 onTap: widget.item.text.isEmpty
                     ? null
@@ -209,38 +248,6 @@ class _TodoRowState extends State<_TodoRow> {
               ),
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool isDark;
-
-  const _AddButton({
-    required this.label,
-    required this.onTap,
-    required this.isDark,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12.5,
-            color: inkLight,
-            letterSpacing: 0.3,
-          ),
-        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../data/models/time_block.dart';
+import '../../../widgets/paper_background.dart';
 import '../../../widgets/time_range_picker.dart';
 
 typedef OnBlockChanged = void Function(
@@ -33,6 +34,7 @@ class TimeBlockItem extends StatefulWidget {
 
 class _TimeBlockItemState extends State<TimeBlockItem> {
   late final TextEditingController _descCtrl;
+  final FocusNode _descFocus = FocusNode();
 
   @override
   void initState() {
@@ -52,6 +54,7 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
   @override
   void dispose() {
     _descCtrl.dispose();
+    _descFocus.dispose();
     super.dispose();
   }
 
@@ -67,6 +70,10 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
     if (result != null) {
       widget.onChanged(widget.block.id,
           startTime: result.start, endTime: result.end);
+      // 确定时间后自动聚焦到描述输入框，方便连续输入
+      Future.delayed(const Duration(milliseconds: 80), () {
+        if (mounted) _descFocus.requestFocus();
+      });
     }
   }
 
@@ -74,7 +81,9 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
   Widget build(BuildContext context) {
     final inkLight = widget.isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
     final inkDark = widget.isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
+    final ruleLine = widget.isDark ? AppColors.ruleLineDark : AppColors.ruleLineLight;
     final hasTime = widget.block.startTime.isNotEmpty || widget.block.endTime.isNotEmpty;
+    const descLineSpacing = 12.5 * 1.4;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
@@ -135,42 +144,59 @@ class _TimeBlockItemState extends State<TimeBlockItem> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                // Description
+                // Description（横线与 12.5 / height 1.4 行距一致）
                 widget.readonly
-                    ? Text(
-                        widget.block.description.isEmpty
-                            ? '（无描述）'
-                            : widget.block.description,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: widget.block.description.isEmpty
-                              ? inkLight
-                              : inkDark,
-                          height: 1.4,
+                    ? CustomPaint(
+                        painter: RuleLinePainter(
+                          lineColor: ruleLine.withValues(alpha: 0.45),
+                          spacing: descLineSpacing,
+                          firstLineY: 0,
+                        ),
+                        child: Text(
+                          widget.block.description.isEmpty
+                              ? '（无描述）'
+                              : widget.block.description,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: widget.block.description.isEmpty
+                                ? inkLight
+                                : inkDark,
+                            height: 1.4,
+                          ),
                         ),
                       )
-                    : TextField(
-                        controller: _descCtrl,
-                        onChanged: (v) => widget.onChanged(
-                            widget.block.id,
-                            description: v),
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: inkDark,
-                          height: 1.4,
+                    : CustomPaint(
+                        painter: RuleLinePainter(
+                          lineColor: ruleLine.withValues(alpha: 0.45),
+                          spacing: descLineSpacing,
+                          firstLineY: 0,
                         ),
-                        decoration: InputDecoration(
-                          hintText: '描述…',
-                          hintStyle: TextStyle(
-                            fontSize: 12,
-                            color: inkLight,
+                        child: TextField(
+                          controller: _descCtrl,
+                          focusNode: _descFocus,
+                          onChanged: (v) => widget.onChanged(
+                              widget.block.id,
+                              description: v),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: inkDark,
+                            height: 1.4,
                           ),
-                          border: InputBorder.none,
-                          isDense: true,
-                          contentPadding: EdgeInsets.zero,
+                          decoration: InputDecoration(
+                            hintText: '描述…',
+                            hintStyle: TextStyle(
+                              fontSize: 12,
+                              color: inkLight,
+                            ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            filled: true,
+                            fillColor: Colors.transparent,
+                          ),
+                          maxLines: null,
+                          keyboardType: TextInputType.multiline,
                         ),
-                        maxLines: null,
-                        keyboardType: TextInputType.multiline,
                       ),
               ],
             ),

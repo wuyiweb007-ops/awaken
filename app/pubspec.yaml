@@ -1,7 +1,7 @@
 name: gongzi_daily
-description: 工字日程纸 · 认知觉醒每日计划本
+description: 觉醒笔记 · 认知觉醒每日计划本（工字日程纸）
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -33,6 +33,7 @@ dependencies:
 
   # Animations
   flutter_animate: ^4.5.0
+  share_plus: ^13.0.0
 
 dev_dependencies:
   flutter_test:
@@ -47,6 +48,17 @@ flutter_launcher_icons:
   min_sdk_android: 21
   adaptive_icon_background: "#F5EFE0"
   adaptive_icon_foreground: "assets/icon.png"
+  web:
+    generate: true
+    image_path: "assets/icon.png"
+    background_color: "#F5EFE0"
+    theme_color: "#8B4A1E"
+  macos:
+    generate: true
+    image_path: "assets/icon.png"
+  windows:
+    generate: true
+    image_path: "assets/icon.png"
 
 flutter:
   uses-material-design: true

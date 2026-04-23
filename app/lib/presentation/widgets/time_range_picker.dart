@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 
-/// 弹出时间范围选择器（双端刻度条，覆盖 00:00–24:00，步进 15 分钟）
+/// 弹出时间范围选择器（4 个独立滚轮：开始时、开始分、结束时、结束分）
 Future<({String start, String end})?> showTimeRangePicker(
   BuildContext context, {
   required String initialStart,
@@ -22,6 +22,29 @@ Future<({String start, String end})?> showTimeRangePicker(
   );
 }
 
+/// 弹出单时间选择器（用于通知提醒设置，与今天页面风格一致）
+Future<TimeOfDay?> showNotificationTimePicker(
+  BuildContext context, {
+  required TimeOfDay initial,
+  required Color accentColor,
+  required bool isDark,
+}) async {
+  return showModalBottomSheet<TimeOfDay>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: false,
+    builder: (_) => _NotificationTimePickerSheet(
+      initial: initial,
+      accentColor: accentColor,
+      isDark: isDark,
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Time Range Picker
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _TimeRangePickerSheet extends StatefulWidget {
   final String initialStart;
   final String initialEnd;
@@ -40,52 +63,139 @@ class _TimeRangePickerSheet extends StatefulWidget {
 }
 
 class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
-  // 总共 24*4 = 96 个步进格（每格 15 分钟）
-  static const int _steps = 96;
-
-  late double _startVal;
-  late double _endVal;
+  late int _startH, _startM, _endH, _endM;
+  late FixedExtentScrollController _sHCtrl, _sMCtrl, _eHCtrl, _eMCtrl;
 
   @override
   void initState() {
     super.initState();
-    _startVal = _timeToVal(widget.initialStart).clamp(0.0, _steps.toDouble());
-    _endVal = _timeToVal(widget.initialEnd).clamp(0.0, _steps.toDouble());
-    if (_endVal <= _startVal) _endVal = (_startVal + 4).clamp(0.0, _steps.toDouble());
+    final s = _parseTime(widget.initialStart, 8, 0);
+    final e = _parseTime(widget.initialEnd, 9, 0);
+    _startH = s.$1;
+    _startM = s.$2;
+    _endH = e.$1;
+    _endM = e.$2;
+    // 确保结束时间晚于开始时间
+    if (_totalMin(_endH, _endM) <= _totalMin(_startH, _startM)) {
+      final nm = _totalMin(_startH, _startM) + 30;
+      _endH = (nm ~/ 60).clamp(0, 23);
+      _endM = nm % 60;
+    }
+    _sHCtrl = FixedExtentScrollController(initialItem: _startH);
+    _sMCtrl = FixedExtentScrollController(initialItem: _startM);
+    _eHCtrl = FixedExtentScrollController(initialItem: _endH);
+    _eMCtrl = FixedExtentScrollController(initialItem: _endM);
   }
 
-  double _timeToVal(String t) {
-    if (t.isEmpty) return 32.0; // 默认 08:00
-    final parts = t.split(':');
-    if (parts.length != 2) return 32.0;
-    final h = int.tryParse(parts[0]) ?? 8;
-    final m = int.tryParse(parts[1]) ?? 0;
-    return (h * 60 + m) / 15.0;
+  @override
+  void dispose() {
+    _sHCtrl.dispose();
+    _sMCtrl.dispose();
+    _eHCtrl.dispose();
+    _eMCtrl.dispose();
+    super.dispose();
   }
 
-  String _valToTime(double val) {
-    final totalMin = (val * 15).round();
-    final h = totalMin ~/ 60;
-    final m = totalMin % 60;
-    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+  (int, int) _parseTime(String t, int dh, int dm) {
+    if (t.isEmpty) return (dh, dm);
+    final p = t.split(':');
+    if (p.length != 2) return (dh, dm);
+    return (int.tryParse(p[0]) ?? dh, int.tryParse(p[1]) ?? dm);
+  }
+
+  int _totalMin(int h, int m) => h * 60 + m;
+
+  String _fmt(int h, int m) =>
+      '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}';
+
+  void _onStartHChanged(int h) {
+    setState(() {
+      _startH = h;
+      _adjustEnd();
+    });
+  }
+
+  void _onStartMChanged(int m) {
+    setState(() {
+      _startM = m;
+      _adjustEnd();
+    });
+  }
+
+  void _onEndHChanged(int h) {
+    setState(() {
+      _endH = h;
+      _adjustStart();
+    });
+  }
+
+  void _onEndMChanged(int m) {
+    setState(() {
+      _endM = m;
+      _adjustStart();
+    });
+  }
+
+  void _adjustEnd() {
+    if (_totalMin(_endH, _endM) <= _totalMin(_startH, _startM)) {
+      final nm = _totalMin(_startH, _startM) + 1;
+      _endH = (nm ~/ 60).clamp(0, 23);
+      _endM = nm % 60;
+      _eHCtrl.animateToItem(
+        _endH,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      _eMCtrl.animateToItem(
+        _endM,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _adjustStart() {
+    if (_totalMin(_startH, _startM) >= _totalMin(_endH, _endM)) {
+      final nm = _totalMin(_endH, _endM) - 1;
+      if (nm < 0) {
+        _startH = 0;
+        _startM = 0;
+      } else {
+        _startH = nm ~/ 60;
+        _startM = nm % 60;
+      }
+      _sHCtrl.animateToItem(
+        _startH,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+      _sMCtrl.animateToItem(
+        _startM,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final bg = widget.isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
-    final inkDark = widget.isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
+    final inkDark =
+        widget.isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
     final inkMed = widget.isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
-    final inkLight = widget.isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
-    final divider = widget.isDark ? AppColors.dividerDark : AppColors.dividerLight;
+    final inkLight =
+        widget.isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
+    final divider =
+        widget.isDark ? AppColors.dividerDark : AppColors.dividerLight;
 
-    final startStr = _valToTime(_startVal);
-    final endStr = _valToTime(_endVal);
-    final durationMin = ((_endVal - _startVal) * 15).round();
+    final startStr = _fmt(_startH, _startM);
+    final endStr = _fmt(_endH, _endM);
+    final durationMin =
+        _totalMin(_endH, _endM) - _totalMin(_startH, _startM);
     final dh = durationMin ~/ 60;
     final dm = durationMin % 60;
-    final durationStr = dh > 0
-        ? (dm > 0 ? '$dh 小时 $dm 分' : '$dh 小时')
-        : '$dm 分钟';
+    final durationStr =
+        dh > 0 ? (dm > 0 ? '$dh 小时 $dm 分' : '$dh 小时') : '$dm 分钟';
 
     return Container(
       decoration: BoxDecoration(
@@ -100,9 +210,8 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 拖拽把手
+          // 拖动手柄
           Center(
             child: Container(
               width: 36,
@@ -114,7 +223,6 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
             ),
           ),
           const SizedBox(height: 16),
-
           // 标题行
           Row(
             children: [
@@ -129,7 +237,8 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
               ),
               const Spacer(),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: widget.accentColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(6),
@@ -145,61 +254,112 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
-
-          // 时间显示
+          const SizedBox(height: 12),
+          // 四列滚轮：开始时、开始分 | 结束时、结束分
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _TimeLabel(
-                label: '开始',
-                time: startStr,
-                color: widget.accentColor,
-                inkMed: inkMed,
+              // 开始时间
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '开  始',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: inkMed,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _DoubleWheelTime(
+                      hour: _startH,
+                      minute: _startM,
+                      hCtrl: _sHCtrl,
+                      mCtrl: _sMCtrl,
+                      onHourChanged: _onStartHChanged,
+                      onMinuteChanged: _onStartMChanged,
+                      accentColor: widget.accentColor,
+                      inkLight: inkLight,
+                      divider: divider,
+                    ),
+                  ],
+                ),
               ),
-              Icon(Icons.arrow_forward_rounded, size: 16, color: inkLight),
-              _TimeLabel(
-                label: '结束',
-                time: endStr,
-                color: widget.accentColor,
-                inkMed: inkMed,
-                alignRight: true,
+              // 分隔箭头
+              Padding(
+                padding: const EdgeInsets.only(top: 28),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: inkLight,
+                ),
+              ),
+              // 结束时间
+              Expanded(
+                child: Column(
+                  children: [
+                    Text(
+                      '结  束',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: inkMed,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    _DoubleWheelTime(
+                      hour: _endH,
+                      minute: _endM,
+                      hCtrl: _eHCtrl,
+                      mCtrl: _eMCtrl,
+                      onHourChanged: _onEndHChanged,
+                      onMinuteChanged: _onEndMChanged,
+                      accentColor: widget.accentColor,
+                      inkLight: inkLight,
+                      divider: divider,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // 双端滑块
-          _RangeSliderWidget(
-            steps: _steps,
-            startVal: _startVal,
-            endVal: _endVal,
-            accentColor: widget.accentColor,
-            isDark: widget.isDark,
-            onChanged: (s, e) => setState(() {
-              _startVal = s;
-              _endVal = e;
-            }),
+          const SizedBox(height: 10),
+          // 已选时间展示
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                startStr,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: widget.accentColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 16,
+                  color: inkLight,
+                ),
+              ),
+              Text(
+                endStr,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  color: widget.accentColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 4),
-
-          // 刻度标签
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                for (final h in [0, 6, 12, 18, 24])
-                  Text(
-                    h == 24 ? '24' : '$h',
-                    style: TextStyle(fontSize: 10, color: inkLight),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-
-          // 确认/取消
+          const SizedBox(height: 16),
+          // 取消/确定按钮
           Row(
             children: [
               Expanded(
@@ -232,7 +392,10 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text('确定', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  child: const Text(
+                    '确定',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
                 ),
               ),
             ],
@@ -243,36 +406,65 @@ class _TimeRangePickerSheetState extends State<_TimeRangePickerSheet> {
   }
 }
 
-class _TimeLabel extends StatelessWidget {
-  final String label;
-  final String time;
-  final Color color;
-  final Color inkMed;
-  final bool alignRight;
+/// 双滚轮：时 + 分
+class _DoubleWheelTime extends StatelessWidget {
+  final int hour;
+  final int minute;
+  final FixedExtentScrollController hCtrl;
+  final FixedExtentScrollController mCtrl;
+  final ValueChanged<int> onHourChanged;
+  final ValueChanged<int> onMinuteChanged;
+  final Color accentColor;
+  final Color inkLight;
+  final Color divider;
 
-  const _TimeLabel({
-    required this.label,
-    required this.time,
-    required this.color,
-    required this.inkMed,
-    this.alignRight = false,
+  const _DoubleWheelTime({
+    required this.hour,
+    required this.minute,
+    required this.hCtrl,
+    required this.mCtrl,
+    required this.onHourChanged,
+    required this.onMinuteChanged,
+    required this.accentColor,
+    required this.inkLight,
+    required this.divider,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: alignRight ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+    return Row(
       children: [
-        Text(label, style: TextStyle(fontSize: 11, color: inkMed)),
-        const SizedBox(height: 2),
+        Expanded(
+          child: _MiniWheel(
+            controller: hCtrl,
+            itemCount: 24,
+            selectedIndex: hour,
+            onChanged: onHourChanged,
+            label: (i) => i.toString().padLeft(2, '0'),
+            accentColor: accentColor,
+            inkLight: inkLight,
+            divider: divider,
+          ),
+        ),
         Text(
-          time,
+          ':',
           style: TextStyle(
-            fontSize: 22,
+            fontSize: 20,
             fontWeight: FontWeight.w700,
-            color: color,
-            letterSpacing: 1,
+            color: accentColor,
             fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        Expanded(
+          child: _MiniWheel(
+            controller: mCtrl,
+            itemCount: 60,
+            selectedIndex: minute,
+            onChanged: onMinuteChanged,
+            label: (i) => i.toString().padLeft(2, '0'),
+            accentColor: accentColor,
+            inkLight: inkLight,
+            divider: divider,
           ),
         ),
       ],
@@ -280,185 +472,313 @@ class _TimeLabel extends StatelessWidget {
   }
 }
 
-/// 自绘双端滑块
-class _RangeSliderWidget extends StatefulWidget {
-  final int steps;
-  final double startVal;
-  final double endVal;
+/// 单列滚轮
+class _MiniWheel extends StatelessWidget {
+  final FixedExtentScrollController controller;
+  final int itemCount;
+  final int selectedIndex;
+  final ValueChanged<int> onChanged;
+  final String Function(int) label;
   final Color accentColor;
-  final bool isDark;
-  final void Function(double start, double end) onChanged;
+  final Color inkLight;
+  final Color divider;
 
-  const _RangeSliderWidget({
-    required this.steps,
-    required this.startVal,
-    required this.endVal,
-    required this.accentColor,
-    required this.isDark,
+  const _MiniWheel({
+    required this.controller,
+    required this.itemCount,
+    required this.selectedIndex,
     required this.onChanged,
+    required this.label,
+    required this.accentColor,
+    required this.inkLight,
+    required this.divider,
   });
 
   @override
-  State<_RangeSliderWidget> createState() => _RangeSliderWidgetState();
-}
-
-class _RangeSliderWidgetState extends State<_RangeSliderWidget> {
-  static const double _thumbR = 14.0;
-  static const double _trackH = 4.0;
-  static const double _minGap = 1.0; // 至少间隔 1 步（15分钟）
-
-  late double _s;
-  late double _e;
-  int? _dragging; // 0 = start thumb, 1 = end thumb
-
-  @override
-  void initState() {
-    super.initState();
-    _s = widget.startVal;
-    _e = widget.endVal;
-  }
-
-  @override
-  void didUpdateWidget(_RangeSliderWidget old) {
-    super.didUpdateWidget(old);
-    _s = widget.startVal;
-    _e = widget.endVal;
-  }
-
-  double _valFromDx(double dx, double width) {
-    final trackW = width - _thumbR * 2;
-    final ratio = ((dx - _thumbR) / trackW).clamp(0.0, 1.0);
-    return (ratio * widget.steps).clamp(0.0, widget.steps.toDouble());
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final trackBg = widget.isDark
-        ? AppColors.dividerDark
-        : AppColors.dividerLight;
+    const itemExtent = 36.0;
+    const wheelHeight = 180.0;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final width = constraints.maxWidth;
-        return SizedBox(
-          height: _thumbR * 2 + 4,
-          width: width,
-          child: GestureDetector(
-            onPanStart: (d) {
-              final val = _valFromDx(d.localPosition.dx, width);
-              final sDiff = (val - _s).abs();
-              final eDiff = (val - _e).abs();
-              _dragging = sDiff <= eDiff ? 0 : 1;
-            },
-            onPanUpdate: (d) {
-              if (_dragging == null) return;
-              final val = _valFromDx(d.localPosition.dx, width);
-              setState(() {
-                if (_dragging == 0) {
-                  _s = val.clamp(0.0, _e - _minGap);
-                } else {
-                  _e = val.clamp(_s + _minGap, widget.steps.toDouble());
-                }
-              });
-              widget.onChanged(_s, _e);
-            },
-            onPanEnd: (_) => _dragging = null,
-            child: CustomPaint(
-              painter: _SliderPainter(
-                steps: widget.steps,
-                startVal: _s,
-                endVal: _e,
-                accentColor: widget.accentColor,
-                trackBg: trackBg,
-                thumbR: _thumbR,
-                trackH: _trackH,
+    return SizedBox(
+      height: wheelHeight,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border(
+                top: BorderSide(color: divider.withValues(alpha: 0.65)),
+                bottom: BorderSide(color: divider.withValues(alpha: 0.65)),
+              ),
+              color: accentColor.withValues(alpha: 0.05),
+            ),
+            child: ListWheelScrollView.useDelegate(
+              controller: controller,
+              itemExtent: itemExtent,
+              perspective: 0.002,
+              diameterRatio: 1.4,
+              physics: const FixedExtentScrollPhysics(),
+              onSelectedItemChanged: onChanged,
+              childDelegate: ListWheelChildBuilderDelegate(
+                childCount: itemCount,
+                builder: (_, i) {
+                  final isSel = i == selectedIndex;
+                  return Center(
+                    child: Text(
+                      label(i),
+                      style: TextStyle(
+                        fontSize: isSel ? 18 : 14,
+                        fontWeight:
+                            isSel ? FontWeight.w700 : FontWeight.w400,
+                        color: isSel
+                            ? accentColor
+                            : inkLight.withValues(alpha: 0.55),
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
           ),
-        );
-      },
+          // 选中高亮线
+          Positioned.fill(
+            child: IgnorePointer(
+              child: Align(
+                alignment: Alignment.center,
+                child: Container(
+                  height: itemExtent,
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                          color: accentColor.withValues(alpha: 0.38)),
+                      bottom: BorderSide(
+                          color: accentColor.withValues(alpha: 0.38)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
-class _SliderPainter extends CustomPainter {
-  final int steps;
-  final double startVal;
-  final double endVal;
-  final Color accentColor;
-  final Color trackBg;
-  final double thumbR;
-  final double trackH;
+// ─────────────────────────────────────────────────────────────────────────────
+// Notification Time Picker（提醒时间设置，与今天页面风格一致）
+// ─────────────────────────────────────────────────────────────────────────────
 
-  _SliderPainter({
-    required this.steps,
-    required this.startVal,
-    required this.endVal,
+class _NotificationTimePickerSheet extends StatefulWidget {
+  final TimeOfDay initial;
+  final Color accentColor;
+  final bool isDark;
+
+  const _NotificationTimePickerSheet({
+    required this.initial,
     required this.accentColor,
-    required this.trackBg,
-    required this.thumbR,
-    required this.trackH,
+    required this.isDark,
   });
 
-  double _xFromVal(double val, double width) {
-    final trackW = width - thumbR * 2;
-    return thumbR + (val / steps) * trackW;
+  @override
+  State<_NotificationTimePickerSheet> createState() =>
+      _NotificationTimePickerSheetState();
+}
+
+class _NotificationTimePickerSheetState
+    extends State<_NotificationTimePickerSheet> {
+  late int _hour, _minute;
+  late FixedExtentScrollController _hCtrl, _mCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _hour = widget.initial.hour;
+    _minute = widget.initial.minute;
+    _hCtrl = FixedExtentScrollController(initialItem: _hour);
+    _mCtrl = FixedExtentScrollController(initialItem: _minute);
   }
 
   @override
-  void paint(Canvas canvas, Size size) {
-    final cy = size.height / 2;
-    final trackW = size.width - thumbR * 2;
-    final sx = _xFromVal(startVal, size.width);
-    final ex = _xFromVal(endVal, size.width);
-
-    // Background track
-    final bgPaint = Paint()
-      ..color = trackBg
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = trackH
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(thumbR, cy), Offset(thumbR + trackW, cy), bgPaint);
-
-    // Active track
-    final activePaint = Paint()
-      ..color = accentColor
-      ..strokeCap = StrokeCap.round
-      ..strokeWidth = trackH
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(sx, cy), Offset(ex, cy), activePaint);
-
-    // Hour tick marks
-    final tickPaint = Paint()
-      ..color = trackBg
-      ..strokeWidth = 1;
-    for (int h = 1; h < 24; h++) {
-      final val = h * 4.0;
-      final x = _xFromVal(val, size.width);
-      canvas.drawLine(Offset(x, cy - 5), Offset(x, cy + 5), tickPaint);
-    }
-
-    // Shadow + thumb circles
-    final shadowPaint = Paint()
-      ..color = accentColor.withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
-    final thumbPaint = Paint()
-      ..color = accentColor
-      ..style = PaintingStyle.fill;
-    final thumbBorderPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-
-    for (final x in [sx, ex]) {
-      canvas.drawCircle(Offset(x, cy), thumbR, shadowPaint);
-      canvas.drawCircle(Offset(x, cy), thumbR, thumbPaint);
-      canvas.drawCircle(Offset(x, cy), thumbR - 3, thumbBorderPaint);
-    }
+  void dispose() {
+    _hCtrl.dispose();
+    _mCtrl.dispose();
+    super.dispose();
   }
 
   @override
-  bool shouldRepaint(_SliderPainter old) =>
-      old.startVal != startVal ||
-      old.endVal != endVal ||
-      old.accentColor != accentColor;
+  Widget build(BuildContext context) {
+    final bg = widget.isDark ? AppColors.surfaceDark : AppColors.surfaceLight;
+    final inkDark =
+        widget.isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight;
+    final inkMed = widget.isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    final inkLight =
+        widget.isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
+    final divider =
+        widget.isDark ? AppColors.dividerDark : AppColors.dividerLight;
+
+    final timeStr =
+        '${_hour.toString().padLeft(2, '0')}:${_minute.toString().padLeft(2, '0')}';
+
+    return Container(
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      padding: EdgeInsets.only(
+        left: 20,
+        right: 20,
+        top: 16,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              decoration: BoxDecoration(
+                color: divider,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '设置提醒时间',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: inkDark,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 已选时间大字展示
+          Text(
+            timeStr,
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              color: widget.accentColor,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // 两列滚轮：时 + 分
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              SizedBox(
+                width: 90,
+                child: Column(
+                  children: [
+                    Text(
+                      '时',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: inkMed,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _MiniWheel(
+                      controller: _hCtrl,
+                      itemCount: 24,
+                      selectedIndex: _hour,
+                      onChanged: (h) => setState(() => _hour = h),
+                      label: (i) => i.toString().padLeft(2, '0'),
+                      accentColor: widget.accentColor,
+                      inkLight: inkLight,
+                      divider: divider,
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.only(top: 20),
+                child: Text(
+                  ':',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: widget.accentColor,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 90,
+                child: Column(
+                  children: [
+                    Text(
+                      '分',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: inkMed,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    _MiniWheel(
+                      controller: _mCtrl,
+                      itemCount: 60,
+                      selectedIndex: _minute,
+                      onChanged: (m) => setState(() => _minute = m),
+                      label: (i) => i.toString().padLeft(2, '0'),
+                      accentColor: widget.accentColor,
+                      inkLight: inkLight,
+                      divider: divider,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: inkMed,
+                    side: BorderSide(color: divider),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('取消', style: TextStyle(fontSize: 14)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    TimeOfDay(hour: _hour, minute: _minute),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: widget.accentColor,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    '确定',
+                    style:
+                        TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }

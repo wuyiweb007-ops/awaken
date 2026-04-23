@@ -8,7 +8,7 @@
 PRODUCT_NAME = gongzi_daily
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = com.awaken.gongziDaily
+PRODUCT_BUNDLE_IDENTIFIER = com.wiseflownext.awake
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2026 com.awaken. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 com.wiseflownext. All rights reserved.

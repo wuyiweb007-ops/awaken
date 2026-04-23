@@ -106,8 +106,12 @@ class TodayProvider extends ChangeNotifier {
   // ── PLAN block operations ───────────────────────────────────
 
   void addPlanBlock() {
+    // 新块的开始时间默认等于上一条计划块的结束时间，方便连续录入
+    final lastEndTime = _record.planBlocks.isNotEmpty
+        ? _record.planBlocks.last.endTime
+        : '';
     final blocks = List<TimeBlock>.from(_record.planBlocks)
-      ..add(TimeBlock(id: _uuid.v4()));
+      ..add(TimeBlock(id: _uuid.v4(), startTime: lastEndTime));
     _update(_record.copyWith(planBlocks: blocks));
   }
 
@@ -146,8 +150,12 @@ class TodayProvider extends ChangeNotifier {
   // ── ACTUAL block operations ─────────────────────────────────
 
   void addActualBlock() {
+    // 新块的开始时间默认等于上一条实际块的结束时间，方便连续录入
+    final lastEndTime = _record.actualBlocks.isNotEmpty
+        ? _record.actualBlocks.last.endTime
+        : '';
     final blocks = List<TimeBlock>.from(_record.actualBlocks)
-      ..add(TimeBlock(id: _uuid.v4()));
+      ..add(TimeBlock(id: _uuid.v4(), startTime: lastEndTime));
     _update(_record.copyWith(actualBlocks: blocks));
   }
 
@@ -172,6 +180,16 @@ class TodayProvider extends ChangeNotifier {
 
   void updateReflection(String text) {
     _update(_record.copyWith(reflection: text));
+  }
+
+  // ── SAVE TO HISTORY ─────────────────────────────────────────
+
+  /// 手动将今日记录存入历史（不重置今日数据，仅标记 isSaved = true）
+  void saveToHistory() {
+    final saved = _record.copyWith(isSaved: true, savedAt: DateTime.now());
+    _record = saved;
+    notifyListeners();
+    _storage.saveRecord(saved);
   }
 
   // ── Internal ────────────────────────────────────────────────

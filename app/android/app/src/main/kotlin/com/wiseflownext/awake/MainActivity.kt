@@ -1,4 +1,4 @@
-package com.awaken.gongzi_daily
+package com.wiseflownext.awake
 
 import io.flutter.embedding.android.FlutterActivity
 

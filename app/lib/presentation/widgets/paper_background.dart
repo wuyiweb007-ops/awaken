@@ -6,15 +6,21 @@ import '../../core/theme/app_colors.dart';
 class RuleLinePainter extends CustomPainter {
   final Color lineColor;
   final double spacing;
+  /// 首条横线距顶（与 [spacing] 同周期；默认与旧版一致为 [spacing]）。
+  final double firstLineY;
 
-  const RuleLinePainter({required this.lineColor, this.spacing = 26});
+  const RuleLinePainter({
+    required this.lineColor,
+    this.spacing = 26,
+    this.firstLineY = 26,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
       ..color = lineColor
       ..strokeWidth = 0.6;
-    double y = spacing;
+    double y = firstLineY;
     while (y < size.height) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
       y += spacing;
@@ -23,7 +29,9 @@ class RuleLinePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(RuleLinePainter old) =>
-      old.lineColor != lineColor || old.spacing != spacing;
+      old.lineColor != lineColor ||
+      old.spacing != spacing ||
+      old.firstLineY != firstLineY;
 }
 
 /// A paper-card container with ruled lines and warm shadow.
