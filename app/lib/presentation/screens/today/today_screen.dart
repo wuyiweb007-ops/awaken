@@ -200,8 +200,11 @@ class _FloatingToolboxState extends State<_FloatingToolbox>
     if (!_posInit) {
       _posInit = true;
       final size = MediaQuery.sizeOf(context);
+      // 使用 SafeArea 内部的有效高度，避免按钮被状态栏/Home条遮挡
+      final padding = MediaQuery.paddingOf(context);
+      final safeH = size.height - padding.top - padding.bottom;
       // 默认放在右下角，省察栏上方
-      _center = Offset(size.width - 32, size.height - 100);
+      _center = Offset(size.width - 32, safeH - 100);
     }
   }
 
@@ -268,7 +271,13 @@ class _FloatingToolboxState extends State<_FloatingToolbox>
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final angles = _fanAngles(size);
+    final padding = MediaQuery.paddingOf(context);
+    // SafeArea 内的有效尺寸，用于拖动边界和象限判断
+    final effectiveSize = Size(
+      size.width,
+      size.height - padding.top - padding.bottom,
+    );
+    final angles = _fanAngles(effectiveSize);
     final actions = _actions;
 
     return Positioned.fill(
@@ -335,9 +344,10 @@ class _FloatingToolboxState extends State<_FloatingToolbox>
                 setState(() {
                   _dragging = true;
                   _center = Offset(
-                    (_center.dx + d.delta.dx).clamp(_mainR, size.width - _mainR),
+                    (_center.dx + d.delta.dx)
+                        .clamp(_mainR, effectiveSize.width - _mainR),
                     (_center.dy + d.delta.dy)
-                        .clamp(_mainR, size.height - _mainR),
+                        .clamp(_mainR, effectiveSize.height - _mainR),
                   );
                 });
               },

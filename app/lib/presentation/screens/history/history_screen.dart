@@ -21,9 +21,17 @@ class HistoryScreen extends StatefulWidget {
 
 class _HistoryScreenState extends State<HistoryScreen> {
   late final PageController _pageController;
+  final ScrollController _tickerCtrl = ScrollController();
 
-  /// page 0 = yesterday, page 1 = 2 days ago, etc.
-  static const int _maxPages = 365;
+  /// 只保存有记录的日期键，降序（最新在前）
+  List<String> _keys = [];
+  int _currentPage = 0;
+
+  /// 手指是否按住屏幕（用于控制方向箭头显隐）
+  bool _pointerDown = false;
+
+  static const double _tickerItemH = 38.0;
+  static const double _tickerW = 36.0;
 
   @override
   void initState() {
@@ -32,14 +40,39 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_keys.isEmpty) {
+      // 只加载有记录的日期，provider 已按降序排列
+      _keys = context.read<HistoryProvider>().allKeys;
+    }
+  }
+
+  @override
   void dispose() {
     _pageController.dispose();
+    _tickerCtrl.dispose();
     super.dispose();
   }
 
-  String _dateKeyForPage(int page) {
-    final date = DateTime.now().subtract(Duration(days: page + 1));
-    return dateKey(date);
+  void _onPageChanged(int page) {
+    setState(() => _currentPage = page);
+    _syncTicker(page);
+  }
+
+  void _syncTicker(int index) {
+    if (!_tickerCtrl.hasClients) return;
+    final target = (index * _tickerItemH) -
+        (_tickerCtrl.position.viewportDimension / 2) +
+        _tickerItemH / 2;
+    _tickerCtrl.animateTo(
+      target.clamp(
+        _tickerCtrl.position.minScrollExtent,
+        _tickerCtrl.position.maxScrollExtent,
+      ),
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
@@ -49,120 +82,113 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
     final accent = isDark ? AppColors.accentDark : AppColors.accentLight;
 
+    if (_keys.isEmpty) {
+      return _EmptyHistoryScreen(isDark: isDark);
+    }
+
     return Scaffold(
       backgroundColor: bg,
       body: SafeArea(
         child: Stack(
           children: [
-            PageView.builder(
-              controller: _pageController,
-              itemCount: _maxPages,
-              physics: const BouncingScrollPhysics(),
-              itemBuilder: (context, page) {
-                final key = _dateKeyForPage(page);
-                final record = context.read<HistoryProvider>().loadRecord(key);
-                if (record.isEmpty) {
-                  return _EmptyDayPage(isDark: isDark);
-                }
-                return GongziDayCard(
-                  isDark: isDark,
-                  topBandChild: _HistoryTodoBand(record: record, isDark: isDark),
-                  midLeftChild: _ReadonlyBlocks(
-                    label: '计划完成',
-                    icon: Icons.schedule_rounded,
-                    blocks: record.planBlocks,
-                    color: isDark
-                        ? AppColors.planColorDark
-                        : AppColors.planColorLight,
+            // ── PageView：只翻有记录的日期 ──────────────────────────────────
+            Listener(
+              onPointerDown: (_) => setState(() => _pointerDown = true),
+              onPointerUp: (_) => setState(() => _pointerDown = false),
+              onPointerCancel: (_) => setState(() => _pointerDown = false),
+              child: PageView.builder(
+                controller: _pageController,
+                itemCount: _keys.length,
+                physics: const BouncingScrollPhysics(),
+                onPageChanged: _onPageChanged,
+                itemBuilder: (ctx, i) {
+                  final key = _keys[i];
+                  final record = ctx.read<HistoryProvider>().loadRecord(key);
+                  return GongziDayCard(
                     isDark: isDark,
-                  ),
-                  midRightChild: _ReadonlyBlocks(
-                    label: '实际完成',
-                    icon: Icons.check_circle_outline,
-                    blocks: record.actualBlocks,
-                    color: isDark
-                        ? AppColors.actualColorDark
-                        : AppColors.actualColorLight,
-                    isDark: isDark,
-                  ),
-                  bottomBandChild:
-                      _HistoryReflectionBand(record: record, isDark: isDark),
-                )
-                    .animate()
-                    .fadeIn(duration: 250.ms)
-                    .slideX(begin: 0.03, end: 0, duration: 250.ms);
-              },
-            ),
-            Positioned(
-              top: 6,
-              right: 12,
-              child: GestureDetector(
-                onTap: _jumpToNearest,
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? AppColors.surfaceAltDark
-                        : AppColors.surfaceAltLight,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color:
-                          isDark ? AppColors.dividerDark : AppColors.dividerLight,
-                      width: 0.8,
+                    topBandChild:
+                        _HistoryTodoBand(record: record, isDark: isDark),
+                    midLeftChild: _ReadonlyBlocks(
+                      label: '计划完成',
+                      icon: Icons.schedule_rounded,
+                      blocks: record.planBlocks,
+                      color: isDark
+                          ? AppColors.planColorDark
+                          : AppColors.planColorLight,
+                      isDark: isDark,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history_rounded, size: 14, color: accent),
-                      const SizedBox(width: 4),
-                      Text(
-                        '最近记录',
-                        style: TextStyle(fontSize: 11.5, color: inkMed),
-                      ),
-                    ],
-                  ),
-                ),
+                    midRightChild: _ReadonlyBlocks(
+                      label: '实际完成',
+                      icon: Icons.check_circle_outline,
+                      blocks: record.actualBlocks,
+                      color: isDark
+                          ? AppColors.actualColorDark
+                          : AppColors.actualColorLight,
+                      isDark: isDark,
+                    ),
+                    bottomBandChild:
+                        _HistoryReflectionBand(record: record, isDark: isDark),
+                  )
+                      .animate()
+                      .fadeIn(duration: 250.ms)
+                      .slideX(begin: 0.03, end: 0, duration: 250.ms);
+                },
               ),
             ),
+
+            // ── 方向箭头：仅在手指按住时浮现，松手消失 ─────────────────────
+            if (_pointerDown) ...[
+              if (_currentPage > 0)
+                Positioned(
+                  left: 6,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Icon(
+                        Icons.chevron_left_rounded,
+                        color: inkMed.withValues(alpha: 0.20),
+                        size: 52,
+                      ),
+                    ),
+                  ),
+                ),
+              if (_currentPage < _keys.length - 1)
+                Positioned(
+                  right: _tickerW + 4,
+                  top: 0,
+                  bottom: 0,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Icon(
+                        Icons.chevron_right_rounded,
+                        color: inkMed.withValues(alpha: 0.20),
+                        size: 52,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+
+            // ── 右侧日期刻度滚动条 ──────────────────────────────────────────
             Positioned(
-              bottom: 12,
-              left: 0,
               right: 0,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.chevron_left_rounded,
-                    color: inkMed.withValues(alpha: 0.4),
-                    size: 18,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '左滑看更早',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: inkMed.withValues(alpha: 0.4),
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    '右滑看更近',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: inkMed.withValues(alpha: 0.4),
-                      letterSpacing: 0.3,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    color: inkMed.withValues(alpha: 0.4),
-                    size: 18,
-                  ),
-                ],
+              top: 0,
+              bottom: 0,
+              child: _DateTicker(
+                keys: _keys,
+                currentIndex: _currentPage,
+                controller: _tickerCtrl,
+                onTap: (i) => _pageController.animateToPage(
+                  i,
+                  duration: const Duration(milliseconds: 380),
+                  curve: Curves.easeInOut,
+                ),
+                isDark: isDark,
+                accent: accent,
+                inkMed: inkMed,
+                width: _tickerW,
+                itemHeight: _tickerItemH,
               ),
             ),
           ],
@@ -170,73 +196,153 @@ class _HistoryScreenState extends State<HistoryScreen> {
       ),
     );
   }
+}
 
-  void _jumpToNearest() {
-    final provider = context.read<HistoryProvider>();
-    for (int i = 0; i < _maxPages; i++) {
-      final key = _dateKeyForPage(i);
-      final rec = provider.loadRecord(key);
-      if (!rec.isEmpty) {
-        _pageController.animateToPage(
-          i,
-          duration: const Duration(milliseconds: 400),
-          curve: Curves.easeInOut,
-        );
-        return;
-      }
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('暂无历史记录'),
-        duration: Duration(seconds: 2),
+// ── 无历史记录时的空状态页 ───────────────────────────────────────────────────
+
+class _EmptyHistoryScreen extends StatelessWidget {
+  final bool isDark;
+  const _EmptyHistoryScreen({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = isDark ? AppColors.bgDark : AppColors.bgLight;
+    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
+    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+
+    return Scaffold(
+      backgroundColor: bg,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.book_outlined,
+                size: 48,
+                color: inkLight.withValues(alpha: 0.35),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                '还没有历史记录',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: inkMed.withValues(alpha: 0.5),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '今天写完，保存到历史后就可以在这里回顾',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: inkLight.withValues(alpha: 0.4),
+                ),
+              ),
+            ],
+          ).animate().fadeIn(duration: 300.ms),
+        ),
       ),
     );
   }
 }
 
-// ── Empty day ───────────────────────────────────────────────────────────────
+// ── 右侧日期刻度滚动条 ───────────────────────────────────────────────────────
 
-class _EmptyDayPage extends StatelessWidget {
+class _DateTicker extends StatelessWidget {
+  final List<String> keys;
+  final int currentIndex;
+  final ScrollController controller;
+  final void Function(int) onTap;
   final bool isDark;
-  const _EmptyDayPage({required this.isDark});
+  final Color accent;
+  final Color inkMed;
+  final double width;
+  final double itemHeight;
+
+  const _DateTicker({
+    required this.keys,
+    required this.currentIndex,
+    required this.controller,
+    required this.onTap,
+    required this.isDark,
+    required this.accent,
+    required this.inkMed,
+    required this.width,
+    required this.itemHeight,
+  });
+
+  /// "2026-04-23" → "4\n23"
+  String _label(String key) {
+    final p = key.split('-');
+    if (p.length != 3) return key;
+    final month = int.tryParse(p[1]) ?? p[1];
+    final day = p[2];
+    return '$month\n$day';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final inkLight = isDark ? AppColors.inkLightDark : AppColors.inkLightLight;
-    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    final surface =
+        isDark ? AppColors.surfaceAltDark : AppColors.surfaceAltLight;
+    final divider = isDark ? AppColors.dividerDark : AppColors.dividerLight;
 
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.book_outlined,
-            size: 44,
-            color: inkLight.withValues(alpha: 0.4),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            '这一天没有写工字纸',
-            style: TextStyle(
-              fontSize: 15,
-              color: inkMed.withValues(alpha: 0.5),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '向左滑查看更早的记录',
-            style: TextStyle(
-              fontSize: 12.5,
-              color: inkLight.withValues(alpha: 0.4),
-            ),
-          ),
-        ],
-      ).animate().fadeIn(duration: 300.ms),
+    return Container(
+      width: width,
+      decoration: BoxDecoration(
+        color: surface.withValues(alpha: 0.92),
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(8),
+          bottomLeft: Radius.circular(8),
+        ),
+        border: Border(
+          left: BorderSide(color: divider, width: 0.5),
+        ),
+      ),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(8),
+          bottomLeft: Radius.circular(8),
+        ),
+        child: ListView.builder(
+          controller: controller,
+          itemCount: keys.length,
+          itemExtent: itemHeight,
+          physics: const BouncingScrollPhysics(),
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          itemBuilder: (ctx, i) {
+            final selected = i == currentIndex;
+            return GestureDetector(
+              onTap: () => onTap(i),
+              child: Container(
+                alignment: Alignment.center,
+                margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+                decoration: selected
+                    ? BoxDecoration(
+                        color: accent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(5),
+                      )
+                    : null,
+                child: Text(
+                  _label(keys[i]),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    height: 1.25,
+                    color: selected ? accent : inkMed.withValues(alpha: 0.55),
+                    fontWeight:
+                        selected ? FontWeight.w700 : FontWeight.normal,
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
 
-// ── History bands (read-only，布局与「今天」一致) ─────────────────────────────
+// ── History bands（只读，布局与「今天」一致） ──────────────────────────────────
 
 class _HistoryTodoBand extends StatelessWidget {
   final DailyRecord record;

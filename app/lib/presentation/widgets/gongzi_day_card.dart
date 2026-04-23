@@ -13,8 +13,8 @@ const double kGongziMidMinHeight = 172;
 /// 省察区最小高度（仅当底部带存在时）。
 const double kGongziReflectionMinHeight = 152;
 
-/// 顶部待办区最小高度。
-const double kGongziTopMinHeight = 90;
+/// 顶部待办区最小高度（降低 20%）。
+const double kGongziTopMinHeight = 72;
 
 /// 首页/历史共用的「工字纸」卡片：待办 → 计划｜实际 → [可选] 省察。
 class GongziDayCard extends StatelessWidget {
@@ -53,7 +53,8 @@ class GongziDayCard extends StatelessWidget {
         final bandTotal =
             (innerMinHeight - dividerCount).clamp(0.0, double.infinity);
 
-        final topH = math.max(bandTotal * 0.30, kGongziTopMinHeight);
+        // 顶部待办区占比由 0.30 降低 20% 至 0.24
+        final topH = math.max(bandTotal * 0.24, kGongziTopMinHeight);
         final double midH;
         final double? bottomH;
 

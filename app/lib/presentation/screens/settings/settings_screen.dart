@@ -48,11 +48,6 @@ class SettingsScreen extends StatelessWidget {
           _ThemeCard(isDark: isDark, accent: accent),
           const SizedBox(height: 20),
 
-          // ── Default Tab ────────────────────────────────────────
-          _SectionHeader('打开时显示', isDark: isDark),
-          _DefaultTabCard(isDark: isDark, accent: accent),
-          const SizedBox(height: 20),
-
           // ── Data ───────────────────────────────────────────────
           _SectionHeader('数据管理', isDark: isDark),
           _DataCard(isDark: isDark),
