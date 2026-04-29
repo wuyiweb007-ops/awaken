@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/legal_urls.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../data/services/notification_service.dart';
 import '../../../data/services/storage_service.dart';
@@ -36,6 +38,8 @@ class SettingsScreen extends StatelessWidget {
           // ── About ──────────────────────────────────────────────
           _SectionHeader('关于觉醒笔记', isDark: isDark),
           _AboutCard(isDark: isDark),
+          const SizedBox(height: 10),
+          _PrivacyPolicyBlock(isDark: isDark),
           const SizedBox(height: 20),
 
           // ── Reminders ──────────────────────────────────────────
@@ -157,6 +161,94 @@ class _AboutCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Privacy (Guideline 5.1.1: easy access to policy, aligned with App Store URL) ─
+
+class _PrivacyPolicyBlock extends StatelessWidget {
+  final bool isDark;
+  const _PrivacyPolicyBlock({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kPrivacyPolicyUrl.isEmpty) {
+      return _PrivacyPolicyFootnote(isDark: isDark);
+    }
+    return _SettingsCard(
+      isDark: isDark,
+      child: ListTile(
+        onTap: () => _openPrivacyPolicy(context),
+        title: Text(
+          '隐私政策',
+          style: TextStyle(
+            fontSize: 14.5,
+            fontWeight: FontWeight.w600,
+            color: isDark ? AppColors.inkDarkDark : AppColors.inkDarkLight,
+          ),
+        ),
+        subtitle: Text(
+          '在系统浏览器中打开已托管的完整文本',
+          style: TextStyle(
+            fontSize: 12.5,
+            color: isDark ? AppColors.inkMedDark : AppColors.inkMedLight,
+          ),
+        ),
+        trailing: Icon(
+          Icons.open_in_new_rounded,
+          size: 20,
+          color: isDark ? AppColors.inkMedDark : AppColors.inkMedLight,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPrivacyPolicy(BuildContext context) async {
+    final uri = Uri.tryParse(kPrivacyPolicyUrl);
+    if (uri == null || !uri.hasScheme) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('隐私政策链接未正确配置')),
+        );
+      }
+      return;
+    }
+    if (await canLaunchUrl(uri) && context.mounted) {
+      final ok = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!ok && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('无法打开链接')),
+        );
+      }
+    } else if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法打开链接')),
+      );
+    }
+  }
+}
+
+class _PrivacyPolicyFootnote extends StatelessWidget {
+  final bool isDark;
+  const _PrivacyPolicyFootnote({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final inkMed = isDark ? AppColors.inkMedDark : AppColors.inkMedLight;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: Text(
+        '完整隐私政策请见 App Store 应用描述页或「App 隐私」中提供的公开链接。若需在应用内打开，请使用带 PRIVACY_POLICY_URL 的发布构建配置。',
+        style: TextStyle(
+          fontSize: 12,
+          color: inkMed,
+          height: 1.45,
         ),
       ),
     );
@@ -460,8 +552,9 @@ class _ThemeCard extends StatelessWidget {
   }
 }
 
-// ── Default tab card ──────────────────────────────────────────────────────────
+// ── Default tab card (reserved for a future settings row) ───────────────────
 
+// ignore: unused_element
 class _DefaultTabCard extends StatelessWidget {
   final bool isDark;
   final Color accent;
